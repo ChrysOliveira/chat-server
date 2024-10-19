@@ -1,36 +1,56 @@
 package main
 
 import (
-  "net"
-  "os"
-  "io"
-  "log"
-  "fmt"
+	"bufio"
+	"fmt"
+	"io"
+	"log"
+	"net"
+	"os"
+
+	"github.com/ChrysOliveira/chat-server/utils"
 )
 
-func mustCopy(dst io.Writer, src io.Reader) {
-  if _,err := io.Copy(dst, src); err != nil {
-    log.Fatal(err)
-  }
+func main() {
+	utils.CallClear()
+
+	conn := connectToServer()
+
+	done := make(chan struct{})
+	go keepAlive(conn, done)
+
+	mustCopy(conn, os.Stdin)
+
+	conn.Close()
+	// TODO: o processo nao esta encerrando quando perdemos a conexao
+	<-done // espera a gorrotina terminar
 }
 
-func main() {
-  conn, err := net.Dial("tcp", "localhost:3000")
-  fmt.Println("Connected!")
+func connectToServer() net.Conn {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Nickname: ")
+	apelido, _ := reader.ReadString('\n')
 
-  if err != nil {
-    log.Fatal(err)
-  }
+	conn, err := net.Dial("tcp", "localhost:3000")
+	log.Println("Connected!")
 
-  done:= make(chan struct{})
-  
-  go func() {
-    io.Copy(os.Stdout, conn)
-    log.Println("done")
-    done <- struct{}{} // sinaliza para a gorrotina principal
-  }()
+	if err != nil {
+		log.Fatal(err)
+	}
 
-  mustCopy(conn, os.Stdin)
-  conn.Close()
-  <-done // espera a gorrotina terminar
+	conn.Write([]byte(apelido))
+
+	return conn
+}
+
+func keepAlive(conn net.Conn, ch chan struct{}) {
+	io.Copy(os.Stdout, conn)
+	log.Println("Server connection lost")
+	ch <- struct{}{}
+}
+
+func mustCopy(dst io.Writer, src io.Reader) {
+	if _, err := io.Copy(dst, src); err != nil {
+		log.Fatal(err)
+	}
 }

@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"time"
+
+	"github.com/ChrysOliveira/chat-server/utils"
 )
 
 type client chan<- string // canal de mensagem
@@ -22,6 +25,7 @@ func broadcaster() {
 
 		case msg := <-messages:
 			// broadcast de mensagens. Envio para todos
+			// a chave eh o channel do cliente
 			for cli := range clients {
 				cli <- msg
 			}
@@ -44,14 +48,22 @@ func clientWriter(conn net.Conn, ch <-chan string) {
 
 func handleConn(conn net.Conn) {
 	ch := make(chan string)
+
 	go clientWriter(conn, ch)
 
-	apelido := conn.RemoteAddr().String()
-	ch <- "vc é " + apelido
+	bapelido := make([]byte, 20)
+	size, err := conn.Read(bapelido)
+	if err != nil {
+		log.Fatal(err)
+	}
+	apelido := string(bapelido[:size-1]) // size-1 removes the "\n"
+
+	input := bufio.NewScanner(conn)
+
+	ch <- fmt.Sprintf("Connected as %q", apelido)
 	messages <- apelido + " chegou!"
 	entering <- ch
 
-	input := bufio.NewScanner(conn)
 	for input.Scan() {
 		messages <- apelido + ":" + input.Text()
 	}
@@ -68,6 +80,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// TODO: melhorar
+	await := time.After(time.Second)
+	<-await
+	utils.CallClear()
+	fmt.Println("Servidor iniciado!")
 
 	go broadcaster()
 
