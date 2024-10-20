@@ -24,6 +24,12 @@ type ChangeNick struct {
 	new string
 }
 
+type PrivateMessage struct {
+	usrSrc string
+	usrDst string
+	msg    string
+}
+
 var (
 	entering          = make(chan User)
 	enteringBroadcast = make(chan User)
@@ -35,9 +41,10 @@ var (
 	leavingCommand   = make(chan User)
 	leavingPrivate   = make(chan User)
 
-	messages   = make(chan string)
-	commands   = make(chan string)
-	changeNick = make(chan string)
+	messages        = make(chan string)
+	commands        = make(chan string)
+	changeNick      = make(chan string)
+	privateMessages = make(chan PrivateMessage)
 
 	registerChannels = []chan User{
 		enteringBroadcast,
@@ -67,7 +74,7 @@ func main() {
 	fmt.Println("Servidor iniciado!")
 
 	go registerChannelsHandler()
-	go broadcaster()
+	go broadcasterHandler()
 	go commandsHandler()
 	go privateHandler()
 
@@ -99,7 +106,7 @@ func registerChannelsHandler() {
 	}
 }
 
-func broadcaster() {
+func broadcasterHandler() {
 	clients := make(map[chanClient]bool) // todos os clientes conectados
 	for {
 		select {
@@ -110,6 +117,7 @@ func broadcaster() {
 			for cli := range clients {
 				cli <- msg
 			}
+			log.Println(msg)
 
 		case usr := <-enteringBroadcast:
 			clients[usr.chn] = true
@@ -153,6 +161,13 @@ func privateHandler() {
 			chn := clients[nicks[0]]
 			delete(clients, nicks[0])
 			clients[nicks[1]] = chn
+
+		case privateMessage := <-privateMessages:
+			fmt.Printf("Src: %v | Dst: %v | Msg: %v\n", privateMessage.usrSrc, privateMessage.usrDst, privateMessage.msg)
+			chnSrc := clients[privateMessage.usrDst[1:]] // [1:] para remover o @ do nick do dst
+			frase := fmt.Sprintf("@%v disse em privado: %v\n", privateMessage.usrSrc, privateMessage.msg)
+			chnSrc <- frase
+			log.Println(frase)
 
 		case usr := <-enteringPrivate:
 			clients[usr.apelido] = usr.chn
@@ -202,7 +217,7 @@ func handleConn(conn net.Conn) {
 			switch cmd {
 			case "\\msg":
 				if privateUser != "" {
-					messages <- fmt.Sprintf("@%v (private to %v): %v", usr.apelido, privateUser, msg)
+					privateMessages <- PrivateMessage{usr.apelido, privateUser, msg}
 				} else {
 					messages <- fmt.Sprintf("@%v disse: %v", usr.apelido, msg)
 				}

@@ -1,12 +1,4 @@
-[] Quando um usuário mandar uma mensagem privada, exibir no console do servidor e apenas do usuário que receber: “@abc disse em privado: …”. Atenção: mensagens publicas não podem ser recebidas pelos bots
-
 [] Fazer 3 gorrotinas:
-	- Para enviar mensagens em broadcast
-	- Para enviar e receber mensagens privadas
 	- Para enviar e receber mensagens dos bots // NAO FAZ SENTIDO
-	
-[] \msg [@nick] [Menagem] Mensagem pública se não houver usuário ou privada ser houver @nick
-
-[] \exit termina a sessão e sai do programa
 
 [] Um bot que inverte o que foi escrito (Um bot que inverte o que foi escrito)
