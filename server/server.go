@@ -35,27 +35,32 @@ var (
 	enteringBroadcast = make(chan User)
 	enteringCommand   = make(chan User)
 	enteringPrivate   = make(chan User)
+	enteringBot       = make(chan User)
 
 	leaving          = make(chan User)
 	leavingBroadcast = make(chan User)
 	leavingCommand   = make(chan User)
 	leavingPrivate   = make(chan User)
+	leavingBot       = make(chan User)
 
-	messages        = make(chan string)
-	commands        = make(chan string)
-	changeNick      = make(chan string)
-	privateMessages = make(chan PrivateMessage)
+	messages           = make(chan string)
+	commands           = make(chan string)
+	changeNick         = make(chan string)
+	privateMessages    = make(chan PrivateMessage)
+	privateBotMessages = make(chan PrivateMessage)
 
 	registerChannels = []chan User{
 		enteringBroadcast,
 		enteringCommand,
 		enteringPrivate,
+		enteringBot,
 	}
 
 	unregisterChannels = []chan User{
 		leavingBroadcast,
 		leavingCommand,
 		leavingPrivate,
+		leavingBot,
 	}
 )
 
@@ -77,6 +82,7 @@ func main() {
 	go broadcasterHandler()
 	go commandsHandler()
 	go privateHandler()
+	go botHandler()
 
 	for {
 		conn, err := listener.Accept()
@@ -120,7 +126,9 @@ func broadcasterHandler() {
 			log.Println(msg)
 
 		case usr := <-enteringBroadcast:
-			clients[usr.chn] = true
+			if !strings.Contains(usr.apelido, "BOT") {
+				clients[usr.chn] = true
+			}
 
 		case usr := <-leavingBroadcast:
 			delete(clients, usr.chn)
@@ -162,18 +170,43 @@ func privateHandler() {
 			delete(clients, nicks[0])
 			clients[nicks[1]] = chn
 
+		// TODO: adicionar retorno negativo se o usuario dst nao estiver conectado
 		case privateMessage := <-privateMessages:
-			fmt.Printf("Src: %v | Dst: %v | Msg: %v\n", privateMessage.usrSrc, privateMessage.usrDst, privateMessage.msg)
 			chnSrc := clients[privateMessage.usrDst[1:]] // [1:] para remover o @ do nick do dst
 			frase := fmt.Sprintf("@%v disse em privado: %v\n", privateMessage.usrSrc, privateMessage.msg)
 			chnSrc <- frase
+			log.Println("Teste: foi no gorroutine do private")
 			log.Println(frase)
 
 		case usr := <-enteringPrivate:
-			clients[usr.apelido] = usr.chn
+			if !strings.Contains(usr.apelido, "BOT") {
+				clients[usr.apelido] = usr.chn
+			}
 
 		case usr := <-leavingPrivate:
 			delete(clients, usr.apelido)
+		}
+	}
+}
+
+func botHandler() {
+	bots := make(map[string]chanClient)
+
+	for {
+		select {
+		case privateMessage := <-privateMessages:
+			chnSrc := bots[privateMessage.usrDst[1:]] // [1:] para remover o @ do nick do dst
+			frase := fmt.Sprintf("@%v disse em privado: %v\n", privateMessage.usrSrc, privateMessage.msg)
+			log.Println("Teste: foi no gorroutine do bot")
+			chnSrc <- frase
+
+		case usr := <-enteringBot:
+			if strings.Contains(usr.apelido, "BOT") {
+				bots[usr.apelido] = usr.chn
+			}
+
+		case usr := <-leavingBot:
+			delete(bots, usr.apelido)
 		}
 	}
 }
@@ -217,7 +250,10 @@ func handleConn(conn net.Conn) {
 			switch cmd {
 			case "\\msg":
 				if privateUser != "" {
-					privateMessages <- PrivateMessage{usr.apelido, privateUser, msg}
+					if strings.Contains(privateUser, "BOT") {
+					} else {
+						privateMessages <- PrivateMessage{usr.apelido, privateUser, msg}
+					}
 				} else {
 					messages <- fmt.Sprintf("@%v disse: %v", usr.apelido, msg)
 				}
