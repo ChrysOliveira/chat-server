@@ -173,10 +173,9 @@ func privateHandler() {
 		// TODO: adicionar retorno negativo se o usuario dst nao estiver conectado
 		case privateMessage := <-privateMessages:
 			chnSrc := clients[privateMessage.usrDst[1:]] // [1:] para remover o @ do nick do dst
-			frase := fmt.Sprintf("@%v disse em privado: %v\n", privateMessage.usrSrc, privateMessage.msg)
+			frase := fmt.Sprintf("@%v disse em privado: %v", privateMessage.usrSrc, privateMessage.msg)
+			log.Printf("@%v disse em privado: %v", privateMessage.usrSrc, privateMessage.msg)
 			chnSrc <- frase
-			log.Println("Teste: foi no gorroutine do private")
-			log.Println(frase)
 
 		case usr := <-enteringPrivate:
 			if !strings.Contains(usr.apelido, "BOT") {
@@ -194,16 +193,15 @@ func botHandler() {
 
 	for {
 		select {
-		case privateMessage := <-privateMessages:
-			chnSrc := bots[privateMessage.usrDst[1:]] // [1:] para remover o @ do nick do dst
-			frase := fmt.Sprintf("@%v disse em privado: %v\n", privateMessage.usrSrc, privateMessage.msg)
-			log.Println("Teste: foi no gorroutine do bot")
+		case privateBotMessage := <-privateBotMessages:
+			chnSrc := bots[privateBotMessage.usrDst[1:]] // [1:] para remover o @ do nick do dst
+			frase := fmt.Sprintf("@%v disse em privado: %v", privateBotMessage.usrSrc, privateBotMessage.msg)
 			chnSrc <- frase
 
 		case usr := <-enteringBot:
-			if strings.Contains(usr.apelido, "BOT") {
-				bots[usr.apelido] = usr.chn
-			}
+			// if strings.Contains(usr.apelido, "BOT") {
+			bots[usr.apelido] = usr.chn
+			// }
 
 		case usr := <-leavingBot:
 			delete(bots, usr.apelido)
@@ -212,6 +210,7 @@ func botHandler() {
 }
 
 func handleConn(conn net.Conn) {
+	// TODO: remover limite de tamanho
 	bapelido := make([]byte, 20)
 
 	size, err := conn.Read(bapelido)
@@ -241,7 +240,7 @@ func handleConn(conn net.Conn) {
 		matches := re.FindStringSubmatch(rawTxt)
 
 		if len(matches) == 0 {
-			log.Printf("ERROR: Invalid command format at command %q\n", rawTxt)
+			log.Printf("ERROR: Invalid command format at command %q", rawTxt)
 		} else {
 			cmd := matches[1]
 			privateUser := matches[2]
@@ -250,7 +249,8 @@ func handleConn(conn net.Conn) {
 			switch cmd {
 			case "\\msg":
 				if privateUser != "" {
-					if strings.Contains(privateUser, "BOT") {
+					if strings.Contains(privateUser, "BOT") || strings.Contains(usr.apelido, "BOT") {
+						privateBotMessages <- PrivateMessage{usr.apelido, privateUser, msg}
 					} else {
 						privateMessages <- PrivateMessage{usr.apelido, privateUser, msg}
 					}
@@ -269,7 +269,7 @@ func handleConn(conn net.Conn) {
 					log.Println("Invalid nickname change command")
 				}
 			default:
-				messages <- fmt.Sprintf("DEU RUIM: comando %v | msg: %v | matches: %v \n", cmd, msg, "["+strings.Join(matches, ",")+"]")
+				messages <- fmt.Sprintf("DEU RUIM: comando %v | msg: %v | matches: %v", cmd, msg, "["+strings.Join(matches, ",")+"]")
 			}
 		}
 	}
